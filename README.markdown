@@ -54,6 +54,11 @@ This is mostly for use in aliases: some of `git reset`'s behaviour is too
 verbose to type often, but too dangerous to be easy to type, so this gives you
 something that's safe to alias to something short.
 
+## git-uncommit ##
+Removes the previous commit, without changing the working tree. Can accept
+filenames to remove the changes to those files from the previous commit, or -p
+to use the interactive mode of git-checkout to choose which diffs to remove.
+
 ## git-wipify ##
 **TODO**
 
