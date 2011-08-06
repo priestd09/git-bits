@@ -33,12 +33,13 @@ def main():
         with no parents) and "trailing commits" (those with no children) are
         preserved. All other commits are deleted.
         """, epilog="""
-        Still TODO: Nicer output, a default mode of operation that shows something useful,
-        better specified/more interesting exclusion options.
 
-        Be careful: In huge repositories, even the compressed graph can contain thousands
-        of very interconnected nodes, it may take some time for dot to render such enormity.
-
+        There are three kinds of nodes in the output graph: 1) Hexagons, which
+        represent named (i.e. important) commits; 2) Ovals, which represent
+        key commits in the history (i.e. merges and merge-bases); and 3) Circles,
+        which represent compressed (by the -c flag) ranges of unimportant merges.
+        Within a circle, the last commit is an ancestor of all outgoing arrows,
+        and the first commit is a descendant of all incoming arrows.
         """)
 
     parser.add_argument('-M', '--no-merges', action='store_true',
@@ -67,7 +68,7 @@ def main():
         Arguments to be passed to git-log. This allows you
         to construct smaller graphs by filtering on reachability or date.
         To pass flags to git-log, separate them from git-clarity arguments
-        with --. The default is "--all", to see only branches merged into
+        with --. For example, to see only branches merged into
         master, try `git clarity master`.""")
 
     opts = parser.parse_args(sys.argv[1:])
@@ -84,8 +85,7 @@ def main():
     topo_order = []
 
     # Read entire graph
-    args = tuple(opts.log_args) if opts.log_args else ("--all",)
-    args = ("--format=format:%H|%P|%d", "--topo-order") + args
+    args = ("--format=format:%H|%P|%d", "--topo-order") + tuple(opts.log_args)
 
     for line in git("log", *args):
 
@@ -93,7 +93,7 @@ def main():
 
         # Make "named commits" interesting
         if desc:
-            refnames[child] = desc
+            refnames[child] = desc.strip().replace(" ", "\\n")
             interesting.add(child)
 
         topo_order.append(child)
@@ -205,7 +205,7 @@ def main():
 
             for commits in inverse.values():
                 if len(commits) > 1:
-                    result = commits[-1][:6] + ".." + commits[0][:6]
+                    result = commits[-1][:6] + "\\n..\\n" + commits[0][:6]
                     refnames[result] = result
                     for commit in commits:
                         if not commit in interesting:
@@ -244,12 +244,13 @@ def main():
 
     result = ["digraph G {"]
     result += [('"%s" -> "%s"' % tuple(map(name,edge))) for edge in edges]
+    result += ['"%s" [style=bold, shape=hexagon]' % refname for refname in refnames.values() if ".." not in refname]
     result += ["}",""]
     result = "\n".join(result)
 
     # Output
     if opts.format == "raw":
-        output.write(result)
+        opts.output.write(result)
     else:
         Popen(["dot", "-T" + opts.format], stdin=PIPE, stdout=opts.output).communicate(result)
 
