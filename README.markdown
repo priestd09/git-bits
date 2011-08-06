@@ -54,6 +54,17 @@ This is mostly for use in aliases: some of `git reset`'s behaviour is too
 verbose to type often, but too dangerous to be easy to type, so this gives you
 something that's safe to alias to something short.
 
+## git-topic-merge ##
+If you have a pointer to the last commit on a topic branch, topic-merge will
+find the merge commit that integrated that topic branch into an integration
+branch.
+
+## git-topic-base ##
+If you have a pointer to the last commit on a topic branch, topic-base will
+find the commit on which the branch was based. This is not the merge base in
+the case that you have merged the topic into the integration branch before.
+(for limitations, see `git-topic-base -h`)
+
 ## git-uncommit ##
 Removes the previous commit, without changing the working tree. Can accept
 filenames to remove the changes to those files from the previous commit, or -p
