@@ -1,20 +1,12 @@
 #!/usr/bin/python
+import sys
+
 from subprocess import Popen, PIPE
 from collections import defaultdict
 from tempfile import mkstemp
 from os import fdopen, unlink
-from sys import exit
 from random import random
-
-try:
-    from entrypoint import entrywithfile, UsageError
-except:
-    raise
-    print """
-git clarity requires the Python entrypoint library, from pypi.
-$ pip install entrypoint
-    """.strip()
-    exit()
+from argparse import ArgumentParser, FileType, ArgumentTypeError
 
 def git(*args):
     """
@@ -25,11 +17,10 @@ def git(*args):
         yield line
     # User will see git error message on stderr
     if proc.wait():
-        exit()
+        sys.exit()
 
-@entrywithfile(output='w')
-def main(no_merges=False, no_forks=False, compress=False, all=False, format="pdf", output="-",*args):
-    """
+def main():
+    parser = ArgumentParser(description="""
         git clarity creates graphs of the history of your repository's branches.
 
         The graph should show you at a glance where different branches begin
@@ -41,32 +32,48 @@ def main(no_merges=False, no_forks=False, compress=False, all=False, format="pdf
         (those which have more than one parent),  "initial commits" (those
         with no parents) and "trailing commits" (those with no children) are
         preserved. All other commits are deleted.
-
-        args: Arguments to be passed to git-log. This allows you
-              to construct smaller graphs by filtering on reachability or date.
-              To pass flags to git-log, separate them from git-clarity arguments
-              with --. The default is "--all", to see only branches merged into
-              master, try `git clarity master`.
-
-        -M --no-merges: Don't include commits just because they are merges.
-        -F --no-forks:  Don't include commits just because they are forks.
-        -c --compress:  Compress regions of merge and fork commits that contain
-                        no other interesting commits. (Experimental)
-        -a --all:       Include all commits, acts like `git-graphviz` 
-                        (cannot be used with any --no-* option or --compress)
-        -T --format: The output format (default: pdf), raw can be used to get the input to graphviz,
-                     for other valid options consult `dot -T?`
-        -o --output: Put the output to a file (default: -, stdout)
-
+        """, epilog="""
         Still TODO: Nicer output, a default mode of operation that shows something useful,
         better specified/more interesting exclusion options.
 
         Be careful: In huge repositories, even the compressed graph can contain thousands
         of very interconnected nodes, it may take some time for dot to render such enormity.
-    """
 
-    if (no_merges or no_forks or compress) and all:
-        raise UsageError("It doesn't make sense to ask for --all with --no-merges, --no-forks or --compress")
+        """)
+
+    parser.add_argument('-M', '--no-merges', action='store_true',
+            help="Don't include commits just because they are merges.")
+
+    parser.add_argument('-F', '--no-forks', action='store_true',
+            help="Don't include commits just because they are forks.")
+
+    parser.add_argument('-c', '--compress', action='store_true', help="""
+        Compress regions of merge and fork commits that contain
+        no other interesting commits. (Experimental)""")
+
+    parser.add_argument('-a', '--all', action='store_true', help="""
+        Include all commits, acts like `git-graphviz`
+        (cannot be used with any --no-* option or --compress)""")
+
+    parser.add_argument('-T', '--format', default='pdf', help="""
+        The output format (default: pdf), raw can be used to get the input
+        to graphviz, for other valid options consult `dot -T?`""")
+
+    parser.add_argument('-o', '--output', action='store',
+            type=FileType('w'), nargs='?', default=sys.stdout,
+            help="for other valid options consult `dot -T?`")
+
+    parser.add_argument('log_args', nargs='*', help="""
+        Arguments to be passed to git-log. This allows you
+        to construct smaller graphs by filtering on reachability or date.
+        To pass flags to git-log, separate them from git-clarity arguments
+        with --. The default is "--all", to see only branches merged into
+        master, try `git clarity master`.""")
+
+    opts = parser.parse_args(sys.argv[1:])
+
+    if (opts.no_merges or opts.no_forks or opts.compress) and opts.all:
+        raise ArgumentTypeError("It doesn't make sense to ask for --all with --no-merges, --no-forks or --compress")
 
     no_initial = no_trailing = False
 
@@ -77,9 +84,7 @@ def main(no_merges=False, no_forks=False, compress=False, all=False, format="pdf
     topo_order = []
 
     # Read entire graph
-    if not args:
-        args = ("--all",)
-
+    args = tuple(opts.log_args) if opts.log_args else ("--all",)
     args = ("--format=format:%H|%P|%d", "--topo-order") + args
 
     for line in git("log", *args):
@@ -134,8 +139,8 @@ def main(no_merges=False, no_forks=False, compress=False, all=False, format="pdf
             size = len(parents) + len(children)
 
             for commit in parents.keys():
-                if ((no_merges or len(parents[commit]) == 1) and
-                        (no_forks or len(children[commit]) == 1) and
+                if ((opts.no_merges or len(parents[commit]) == 1) and
+                        (opts.no_forks or len(children[commit]) == 1) and
                             (commit not in interesting)):
 
                     for parent in parents[commit]:
@@ -151,7 +156,7 @@ def main(no_merges=False, no_forks=False, compress=False, all=False, format="pdf
         """
             This deals with the situation where a branch has been merged in multiple times
 
-                x  
+                x
                 | \
              x--o--o--x
 
@@ -222,8 +227,8 @@ def main(no_merges=False, no_forks=False, compress=False, all=False, format="pdf
             # Tidy up any newly created single-parent, single-child commits.
             delete_normal()
 
-    if not all:
-        if compress:
+    if not opts.all:
+        if opts.compress:
             unify_compress()
         else:
             delete_normal()
@@ -243,7 +248,10 @@ def main(no_merges=False, no_forks=False, compress=False, all=False, format="pdf
     result = "\n".join(result)
 
     # Output
-    if format == "raw":
+    if opts.format == "raw":
         output.write(result)
     else:
-        Popen(["dot", "-T" + format], stdin=PIPE, stdout=output).communicate(result)
+        Popen(["dot", "-T" + opts.format], stdin=PIPE, stdout=opts.output).communicate(result)
+
+if __name__ == "__main__":
+    main()
