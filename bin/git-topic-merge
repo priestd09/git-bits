@@ -5,8 +5,7 @@ then
     cat <<'HEREDOC'
 git topic-merge <integration-branch> [<topic>=HEAD]
 
-Find the commit where the <topic> was merged into the
-<integration-branch>.
+Find the commit where the <topic> was merged into the <integration-branch>.
 
 TODO: At the moment this only works if <topic> is the last commit on the <topic>
 branch.
@@ -21,12 +20,12 @@ i.e. you must have a structure like:
     I: The HEAD of the integration branch.
     M: The merge that most recently merged topic with integration,
 
-If T has been directly merged into I several times, the oldest such merge will
+If T has been directly merged into I several times, the most recent merge will
 be found:
 
-    o-o-M-o-M'-I
-       /   /
-    o-T----
+    o-o-M'-o-M-I
+       /    /
+    o-T----'
 
 See also: git-topic-base
 
@@ -37,4 +36,4 @@ fi
 integration=$(git rev-parse "${1?Usage: git topic-merge [-h] <integration> [<topic>]}")
 topic=$(git rev-parse "${2:-HEAD}")
 
-echo $(git rev-list --parents $integration | grep "[a-f0-9]\+ [a-f0-9]\+ $topic" | tail -n 1 | cut -d' ' -f 1)
+echo $(git rev-list --parents $integration | grep -m1 "[a-f0-9]\+ [a-f0-9]\+ $topic" | cut -d' ' -f 1)
